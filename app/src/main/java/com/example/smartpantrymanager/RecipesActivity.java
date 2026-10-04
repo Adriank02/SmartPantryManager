@@ -25,170 +25,78 @@ public class RecipesActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_recipes);
 
-        recyclerRecipes = findViewById(R.id.recyclerRecipes);
+        recyclerRecipes =
+                findViewById(R.id.recyclerRecipes);
 
-        databaseHelper = new DatabaseHelper(this);
+        databaseHelper =
+                new DatabaseHelper(this);
 
-        recipeList = new ArrayList<>();
+        recipeList =
+                new ArrayList<>();
 
-        recipeAdapter = new RecipeAdapter(recipeList);
+        recipeAdapter =
+                new RecipeAdapter(this, recipeList);
 
         recyclerRecipes.setLayoutManager(
                 new LinearLayoutManager(this)
         );
 
-        recyclerRecipes.setAdapter(recipeAdapter);
+        recyclerRecipes.setAdapter(
+                recipeAdapter
+        );
 
         createRecipeSuggestions();
     }
 
-    /**
-     * Creates recipe suggestions using the strict-matching rule.
-     *
-     * A recipe is suggested ONLY when:
-     *
-     * 1. Every required ingredient is present.
-     * 2. The pantry quantity is at least the required quantity.
-     * 3. Ingredient names are compared using simple normalisation
-     *    to handle basic singular/plural differences.
-     */
+    // =========================================================
+    // CREATE STRICT RECIPE SUGGESTIONS
+    // =========================================================
+
     private void createRecipeSuggestions() {
 
         recipeList.clear();
 
+        /*
+         * Get all recipes stored in the database.
+         */
+        List<Recipe> allRecipes =
+                databaseHelper.getAllRecipes();
+
+        /*
+         * Get all ingredients currently in the pantry.
+         */
         List<Ingredient> pantryIngredients =
                 databaseHelper.getAllIngredients();
 
         /*
-         * Recipe 1:
-         * Creamy Rice requires:
-         * - Rice: 1 kg
-         * - Milk: 500 ml
+         * Check every database recipe.
+         *
+         * A recipe is added ONLY when all of its
+         * required ingredients are available.
          */
-        if (hasRequiredIngredient(
-                pantryIngredients,
-                "rice",
-                1.0,
-                "kg"
-        )
-                && hasRequiredIngredient(
-                pantryIngredients,
-                "milk",
-                500.0,
-                "ml"
-        )) {
+        for (Recipe recipe : allRecipes) {
 
-            recipeList.add(
-                    new Recipe(
-                            "Creamy Rice",
-                            "A simple creamy rice dish made with rice and milk.",
-                            "Rice (1 kg) and milk (500 ml)"
-                    )
-            );
+            if (recipeCanBeMade(
+                    recipe,
+                    pantryIngredients
+            )) {
+
+                recipeList.add(recipe);
+            }
         }
 
         /*
-         * Recipe 2:
-         * Vegetable Rice requires:
-         * - Rice: 1 kg
-         * - Carrot: 2
-         */
-        if (hasRequiredIngredient(
-                pantryIngredients,
-                "rice",
-                1.0,
-                "kg"
-        )
-                && hasRequiredIngredient(
-                pantryIngredients,
-                "carrot",
-                2.0,
-                "unit"
-        )) {
-
-            recipeList.add(
-                    new Recipe(
-                            "Vegetable Rice",
-                            "A simple rice dish using rice and carrots.",
-                            "Rice (1 kg) and carrots (2)"
-                    )
-            );
-        }
-
-        /*
-         * Recipe 3:
-         * Fruit and Yogurt Bowl requires:
-         * - Apple: 1
-         * - Yogurt: 200 ml
-         */
-        if (hasRequiredIngredient(
-                pantryIngredients,
-                "apple",
-                1.0,
-                "unit"
-        )
-                && hasRequiredIngredient(
-                pantryIngredients,
-                "yogurt",
-                200.0,
-                "ml"
-        )) {
-
-            recipeList.add(
-                    new Recipe(
-                            "Fruit and Yogurt Bowl",
-                            "A quick snack made with fruit and yogurt.",
-                            "Apple (1) and yogurt (200 ml)"
-                    )
-            );
-        }
-
-        /*
-         * Recipe 4:
-         * Healthy Grain Bowl requires:
-         * - Rice: 1 kg
-         * - Carrot: 1
-         * - Milk: 250 ml
-         */
-        if (hasRequiredIngredient(
-                pantryIngredients,
-                "rice",
-                1.0,
-                "kg"
-        )
-                && hasRequiredIngredient(
-                pantryIngredients,
-                "carrot",
-                1.0,
-                "unit"
-        )
-                && hasRequiredIngredient(
-                pantryIngredients,
-                "milk",
-                250.0,
-                "ml"
-        )) {
-
-            recipeList.add(
-                    new Recipe(
-                            "Healthy Grain Bowl",
-                            "A simple meal combining rice, vegetables and milk.",
-                            "Rice (1 kg), carrot (1) and milk (250 ml)"
-                    )
-            );
-        }
-
-        /*
-         * If no complete recipe matches, show feedback
-         * instead of leaving the screen blank.
+         * If nothing can currently be made,
+         * provide feedback to the user.
          */
         if (recipeList.isEmpty()) {
 
             recipeList.add(
                     new Recipe(
                             "No Recipe Suggestions Yet",
-                            "No recipes match your pantry yet. Add the required ingredients and quantities.",
-                            "Every required ingredient must be available in your pantry."
+                            "No complete recipes match your pantry right now.",
+                            "Add the required ingredients and quantities to your pantry.",
+                            "Once all required ingredients are available in sufficient quantities, the recipe will appear here."
                     )
             );
         }
@@ -196,22 +104,122 @@ public class RecipesActivity extends AppCompatActivity {
         recipeAdapter.notifyDataSetChanged();
     }
 
-    /**
-     * Checks whether the pantry contains a required ingredient
-     * in at least the required quantity.
-     */
-    private boolean hasRequiredIngredient(
-            List<Ingredient> pantryIngredients,
-            String requiredName,
-            double requiredQuantity,
-            String requiredUnit
-    ) {
+    // =========================================================
+    // CHECK WHETHER A RECIPE CAN BE MADE
+    // =========================================================
 
-        for (Ingredient ingredient : pantryIngredients) {
+    private boolean recipeCanBeMade(
+            Recipe recipe,
+            List<Ingredient> pantryIngredients) {
+
+        /*
+         * The database currently returns the required
+         * ingredients as text.
+         *
+         * Each line has this format:
+         *
+         * quantity unit ingredient
+         *
+         * Example:
+         *
+         * 1 kg rice
+         * 500 ml milk
+         *
+         * We check every required ingredient.
+         */
+        String ingredients =
+                recipe.getIngredients();
+
+        if (ingredients == null
+                || ingredients.trim().isEmpty()) {
+
+            return false;
+        }
+
+        String[] requiredIngredients =
+                ingredients.split("\\n");
+
+        for (String requiredIngredient :
+                requiredIngredients) {
+
+            if (!requiredIngredientIsAvailable(
+                    requiredIngredient,
+                    pantryIngredients
+            )) {
+
+                /*
+                 * One missing ingredient means
+                 * the entire recipe does NOT match.
+                 */
+                return false;
+            }
+        }
+
+        /*
+         * Every required ingredient passed.
+         */
+        return true;
+    }
+
+    // =========================================================
+    // CHECK ONE REQUIRED INGREDIENT
+    // =========================================================
+
+    private boolean requiredIngredientIsAvailable(
+            String requiredIngredient,
+            List<Ingredient> pantryIngredients) {
+
+        if (requiredIngredient == null) {
+            return false;
+        }
+
+        String text =
+                requiredIngredient
+                        .trim()
+                        .toLowerCase(Locale.ROOT);
+
+        /*
+         * Split the requirement into:
+         *
+         * quantity
+         * unit
+         * ingredient name
+         */
+        String[] parts =
+                text.split("\\s+", 3);
+
+        if (parts.length < 3) {
+            return false;
+        }
+
+        double requiredQuantity;
+
+        try {
+
+            requiredQuantity =
+                    Double.parseDouble(parts[0]);
+
+        } catch (NumberFormatException e) {
+
+            return false;
+        }
+
+        String requiredUnit =
+                parts[1];
+
+        String requiredName =
+                parts[2];
+
+        /*
+         * Look through the pantry for the
+         * required ingredient.
+         */
+        for (Ingredient pantryIngredient :
+                pantryIngredients) {
 
             String pantryName =
                     normaliseIngredientName(
-                            ingredient.getName()
+                            pantryIngredient.getName()
                     );
 
             String wantedName =
@@ -219,42 +227,49 @@ public class RecipesActivity extends AppCompatActivity {
                             requiredName
                     );
 
-            if (pantryName.equals(wantedName)) {
+            if (!pantryName.equals(wantedName)) {
+                continue;
+            }
 
-                double pantryQuantity =
-                        convertToBaseUnit(
-                                ingredient.getQuantity(),
-                                ingredient.getUnit()
-                        );
+            /*
+             * Convert both quantities to a
+             * common base unit.
+             */
+            double pantryQuantity =
+                    convertToBaseUnit(
+                            pantryIngredient.getQuantity(),
+                            pantryIngredient.getUnit()
+                    );
 
-                double requiredAmount =
-                        convertToBaseUnit(
-                                requiredQuantity,
-                                requiredUnit
-                        );
+            double neededQuantity =
+                    convertToBaseUnit(
+                            requiredQuantity,
+                            requiredUnit
+                    );
 
-                if (pantryQuantity >= requiredAmount) {
+            /*
+             * The pantry must contain AT LEAST
+             * the required quantity.
+             */
+            if (areCompatibleUnits(
+                    pantryIngredient.getUnit(),
+                    requiredUnit
+            )
+                    && pantryQuantity >= neededQuantity) {
 
-                    return true;
-                }
+                return true;
             }
         }
 
         return false;
     }
 
-    /**
-     * Normalises simple ingredient-name differences.
-     *
-     * Examples:
-     * tomato -> tomato
-     * tomatoes -> tomato
-     * potato -> potato
-     * potatoes -> potato
-     * apple -> apple
-     * apples -> apple
-     */
-    private String normaliseIngredientName(String name) {
+    // =========================================================
+    // NORMALISE INGREDIENT NAME
+    // =========================================================
+
+    private String normaliseIngredientName(
+            String name) {
 
         if (name == null) {
             return "";
@@ -264,6 +279,14 @@ public class RecipesActivity extends AppCompatActivity {
                 name.trim()
                         .toLowerCase(Locale.ROOT);
 
+        /*
+         * Handle common plural forms.
+         *
+         * berries -> berry
+         * tomatoes -> tomato
+         * potatoes -> potato
+         * apples -> apple
+         */
         if (result.endsWith("ies")
                 && result.length() > 3) {
 
@@ -271,8 +294,7 @@ public class RecipesActivity extends AppCompatActivity {
                     result.substring(
                             0,
                             result.length() - 3
-                    )
-                            + "y";
+                    ) + "y";
 
         } else if (result.endsWith("oes")
                 && result.length() > 3) {
@@ -305,19 +327,124 @@ public class RecipesActivity extends AppCompatActivity {
         return result;
     }
 
-    /**
-     * Converts common units to a base unit so that
-     * quantities can still be compared when the user
-     * enters grams/kilograms or millilitres/litres.
-     *
-     * Weight base unit = grams.
-     * Volume base unit = millilitres.
-     * Count-based units remain unchanged.
-     */
+    // =========================================================
+    // UNIT COMPATIBILITY
+    // =========================================================
+
+    private boolean areCompatibleUnits(
+            String pantryUnit,
+            String requiredUnit) {
+
+        if (pantryUnit == null
+                || requiredUnit == null) {
+
+            return false;
+        }
+
+        String pantry =
+                pantryUnit.trim()
+                        .toLowerCase(Locale.ROOT);
+
+        String required =
+                requiredUnit.trim()
+                        .toLowerCase(Locale.ROOT);
+
+        /*
+         * Weight units.
+         */
+        boolean pantryWeight =
+                pantry.equals("g")
+                        || pantry.equals("gram")
+                        || pantry.equals("grams")
+                        || pantry.equals("kg")
+                        || pantry.equals("kilogram")
+                        || pantry.equals("kilograms");
+
+        boolean requiredWeight =
+                required.equals("g")
+                        || required.equals("gram")
+                        || required.equals("grams")
+                        || required.equals("kg")
+                        || required.equals("kilogram")
+                        || required.equals("kilograms");
+
+        if (pantryWeight && requiredWeight) {
+            return true;
+        }
+
+        /*
+         * Volume units.
+         */
+        boolean pantryVolume =
+                pantry.equals("ml")
+                        || pantry.equals("milliliter")
+                        || pantry.equals("millilitre")
+                        || pantry.equals("milliliters")
+                        || pantry.equals("millilitres")
+                        || pantry.equals("l")
+                        || pantry.equals("liter")
+                        || pantry.equals("litre")
+                        || pantry.equals("liters")
+                        || pantry.equals("litres");
+
+        boolean requiredVolume =
+                required.equals("ml")
+                        || required.equals("milliliter")
+                        || required.equals("millilitre")
+                        || required.equals("milliliters")
+                        || required.equals("millilitres")
+                        || required.equals("l")
+                        || required.equals("liter")
+                        || required.equals("litre")
+                        || required.equals("liters")
+                        || required.equals("litres");
+
+        if (pantryVolume && requiredVolume) {
+            return true;
+        }
+
+        /*
+         * Count-based units.
+         */
+        boolean pantryCount =
+                pantry.equals("unit")
+                        || pantry.equals("units")
+                        || pantry.equals("item")
+                        || pantry.equals("items")
+                        || pantry.equals("piece")
+                        || pantry.equals("pieces");
+
+        boolean requiredCount =
+                required.equals("unit")
+                        || required.equals("units")
+                        || required.equals("item")
+                        || required.equals("items")
+                        || required.equals("piece")
+                        || required.equals("pieces");
+
+        if (pantryCount && requiredCount) {
+            return true;
+        }
+
+        /*
+         * Cooking measurements such as tablespoons
+         * are only considered compatible with the
+         * same type of measurement.
+         */
+        if (pantry.equals(required)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // CONVERT UNITS TO BASE VALUES
+    // =========================================================
+
     private double convertToBaseUnit(
             double quantity,
-            String unit
-    ) {
+            String unit) {
 
         if (unit == null) {
             return quantity;
@@ -329,21 +456,26 @@ public class RecipesActivity extends AppCompatActivity {
 
         switch (normalisedUnit) {
 
+            // Weight
             case "kg":
             case "kilogram":
             case "kilograms":
+
                 return quantity * 1000.0;
 
             case "g":
             case "gram":
             case "grams":
+
                 return quantity;
 
+            // Volume
             case "l":
             case "liter":
             case "litre":
             case "liters":
             case "litres":
+
                 return quantity * 1000.0;
 
             case "ml":
@@ -351,12 +483,18 @@ public class RecipesActivity extends AppCompatActivity {
             case "millilitre":
             case "milliliters":
             case "millilitres":
+
                 return quantity;
 
             default:
+
                 return quantity;
         }
     }
+
+    // =========================================================
+    // REFRESH WHEN RETURNING TO SCREEN
+    // =========================================================
 
     @Override
     protected void onResume() {

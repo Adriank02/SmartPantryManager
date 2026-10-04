@@ -5,6 +5,7 @@ public class Recipe {
     private String name;
     private String description;
     private String ingredients;
+    private String method;
 
     public Recipe(
             String name,
@@ -14,6 +15,19 @@ public class Recipe {
         this.name = name;
         this.description = description;
         this.ingredients = ingredients;
+        this.method = "";
+    }
+
+    public Recipe(
+            String name,
+            String description,
+            String ingredients,
+            String method) {
+
+        this.name = name;
+        this.description = description;
+        this.ingredients = ingredients;
+        this.method = method;
     }
 
     public String getName() {
@@ -26,5 +40,9 @@ public class Recipe {
 
     public String getIngredients() {
         return ingredients;
+    }
+
+    public String getMethod() {
+        return method;
     }
 }
